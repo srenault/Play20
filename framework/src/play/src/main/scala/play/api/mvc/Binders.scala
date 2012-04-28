@@ -47,6 +47,7 @@ trait QueryStringBindable[A] {
   "No URL path binder found for type ${A}. Try to implement an implicit PathBindable for this type."
 )
 trait PathBindable[A] {
+  self =>
 
   /**
    * Bind an URL path parameter.
@@ -69,6 +70,19 @@ trait PathBindable[A] {
    */
   def javascriptUnbind: String = """function(k,v) {return v}"""
 
+  def transform[B](f1: A => B, f2: (String, B) => String, error: String = "Cannot parse parameter {key} as {type} : {error}")(implicit m: Manifest[B]) = new PathBindable[B] {
+    def bind(key: String, value: String): Either[String, B] = {
+      try {
+        self.bind(key, value).right.map(fromValue => f1(fromValue))
+      } catch {
+        case e: Exception => Left(error.replace("{key}", key)
+                                       .replace("{type}", classManifest[B].erasure.getName)
+                                       .replace("{error}", e.getMessage))
+      }
+    }
+
+    def unbind(key: String, value: B): String = f2(key, value)
+  }
 }
 
 /**
@@ -355,6 +369,19 @@ object QueryStringBindable {
  */
 object PathBindable {
 
+  def apply[A](f1: String => A, f2: (String, A) => String, error: String = "Cannot parse parameter {key} as {type} : {error}")(implicit m: Manifest[A]) = new PathBindable[A] {
+    def bind(key: String, value: String): Either[String, A] = {
+      try {
+        Right(f1(URLDecoder.decode(value, "utf-8")))
+      } catch {
+        case e: Exception => Left(error.replace("{key}", key)
+                                       .replace("{type}", classManifest[A].erasure.getName)
+                                       .replace("{error}", e.getMessage))
+      }
+    }
+    def unbind(key: String, value: A): String = f2(key, value)
+  }
+
   /**
    * Path binder for String.
    */
@@ -366,117 +393,80 @@ object PathBindable {
   /**
    * Path binder for Int.
    */
-  implicit def bindableInt = new PathBindable[Int] {
-    def bind(key: String, value: String) = {
-      try {
-        Right(java.lang.Integer.parseInt(URLDecoder.decode(value, "utf-8")))
-      } catch {
-        case e: NumberFormatException => Left("Cannot parse parameter " + key + " as Int: " + e.getMessage)
-      }
-    }
-    def unbind(key: String, value: Int) = value.toString
+  implicit def bindableInt: PathBindable[Int] = PathBindable(
+    value => java.lang.Integer.parseInt(value), 
+    (key, value) => value.toString 
+  )
+
+  /**
+   * Path binder for Integer.
+   */
+  implicit def bindableJavaInteger: PathBindable[java.lang.Integer] = {
+    bindableInt.transform (i => i, (key, i) => i.toString)
   }
 
   /**
    * Path binder for Long.
    */
-  implicit def bindableLong = new PathBindable[Long] {
-    def bind(key: String, value: String) = {
-      try {
-        Right(java.lang.Long.parseLong(URLDecoder.decode(value, "utf-8")))
-      } catch {
-        case e: NumberFormatException => Left("Cannot parse parameter " + key + " as Long: " + e.getMessage)
-      }
-    }
-    def unbind(key: String, value: Long) = value.toString
+  implicit def bindableLong: PathBindable[Long] = PathBindable(
+    value => java.lang.Long.parseLong(value), 
+    (key, value) => value.toString 
+  )
+
+  /**
+   * Path binder for Long.
+   */
+  implicit def bindableJavaLong: PathBindable[java.lang.Long] = {
+    bindableLong.transform (l => l, (key, l) => l.toString)
   }
 
   /**
    * Path binder for Double.
    */
-  implicit def bindableDouble = new PathBindable[Double] {
-    def bind(key: String, value: String) = {
-      try {
-        Right(java.lang.Double.parseDouble(URLDecoder.decode(value, "utf-8")))
-      } catch {
-        case e: NumberFormatException => Left("Cannot parse parameter " + key + " as Double: " + e.getMessage)
-      }
-    }
-    def unbind(key: String, value: Double) = value.toString
-  }
+  implicit def bindableDouble: PathBindable[Double] = PathBindable(
+    value => java.lang.Double.parseDouble(value), 
+    (key, value) => value.toString 
+  )
 
   /**
    * Path binder for Java Double.
    */
-  implicit def bindableJavaDouble = new PathBindable[java.lang.Double] {
-    def bind(key: String, value: String) = {
-      try {
-        Right(java.lang.Double.parseDouble(URLDecoder.decode(value, "utf-8")))
-      } catch {
-        case e: NumberFormatException => Left("Cannot parse parameter " + key + " as Double: " + e.getMessage)
-      }
-    }
-    def unbind(key: String, value: java.lang.Double) = value.toString
+  implicit def bindableJavaDouble: PathBindable[java.lang.Double] = {
+    bindableDouble.transform (d => d, (key, d) => d.toString)
   }
 
   /**
    * Path binder for Float.
    */
-  implicit def bindableFloat = new PathBindable[Float] {
-    def bind(key: String, value: String) = {
-      try {
-        Right(java.lang.Float.parseFloat(URLDecoder.decode(value, "utf-8")))
-      } catch {
-        case e: NumberFormatException => Left("Cannot parse parameter " + key + " as Float: " + e.getMessage)
-      }
-    }
-    def unbind(key: String, value: Float) = value.toString
-  }
+  implicit def bindableFloat: PathBindable[Float] = PathBindable(
+    value => java.lang.Float.parseFloat(value), 
+    (key, value) => value.toString 
+  )
 
   /**
    * Path binder for Java Float.
    */
-  implicit def bindableJavaFloat = new PathBindable[java.lang.Float] {
-    def bind(key: String, value: String) = {
-      try {
-        Right(java.lang.Float.parseFloat(URLDecoder.decode(value, "utf-8")))
-      } catch {
-        case e: NumberFormatException => Left("Cannot parse parameter " + key + " as Float: " + e.getMessage)
-      }
-    }
-    def unbind(key: String, value: java.lang.Float) = value.toString
-  }
-
-  /**
-   * Path binder for Integer.
-   */
-  implicit def bindableInteger = new PathBindable[java.lang.Integer] {
-    def bind(key: String, value: String) = {
-      try {
-        Right(java.lang.Integer.parseInt(URLDecoder.decode(value, "utf-8")))
-      } catch {
-        case e: NumberFormatException => Left("Cannot parse parameter " + key + " as Integer: " + e.getMessage)
-      }
-    }
-    def unbind(key: String, value: java.lang.Integer) = value.toString
+  implicit def bindableJavaFloat: PathBindable[java.lang.Float] = {
+    bindableFloat.transform (f => f, (key, f) => f.toString)
   }
 
   /**
    * Path binder for Boolean.
    */
-  implicit def bindableBoolean = new PathBindable[Boolean] {
-    def bind(key: String, value: String) = {
-      try {
-        java.lang.Integer.parseInt(URLDecoder.decode(value, "utf-8")) match {
-          case 0 => Right(false)
-          case 1 => Right(true)
-          case _ => Left("Cannot parse parameter " + key + " as Boolean: should be 0 or 1")
-        }
-      } catch {
-        case e: NumberFormatException => Left("Cannot parse parameter " + key + " as Boolean: should be 0 or 1")
-      }
-    }
-    def unbind(key: String, value: Boolean) = if (value) "1" else "0"
+  implicit def bindableBoolean: PathBindable[Boolean] = PathBindable(
+    value => java.lang.Integer.parseInt(value) match {
+      case 0 => false
+      case 1 => true
+    },
+    (key, value) => if(value) "1" else "0",
+    "Cannot parse parameter {key} as {type} : should be 0 or 1"
+  )
+
+  /**
+   * Path binder for Java Boolean.
+   */
+  implicit def bindableJavaBoolean: PathBindable[java.lang.Boolean] = {
+    bindableBoolean.transform (b => b, (key, b) => if(b) "1" else "0")
   }
 
   /**
